@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+    <meta charset="UTF-8">
+    <title>بازی اکشن اسپایدرمن - تار زدن در شهر</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #111;
+            color: #fff;
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            border: 3px solid #e62429;
+            box-shadow: 0 0 20px rgba(230, 36, 41, 0.5);
+            background: #0f172a;
+        }
+        .instructions {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #ccc;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🕷️ Spider-Man: Web Shooter 2D</h1>
+    <canvas id="gameCanvas" width="900" height="500"></canvas>
+    <div class="instructions">
+        🕹️ <b>راهنما:</b> کلیک چپ موس روی ساختمان‌ها = شلیک تار و تاب خوردن | کلیک راست/کلید Space = پرتاب به بالا | کلید A و D = حرکت چپ و راست
+    </div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// متغیرهای بازی
+let score = 0;
+let gameOver = false;
+
+// تنظیمات بازیکن (Spider-Man)
+const player = {
+    x: 100,
+    y: 300,
+    vx: 0,
+    vy: 0,
+    radius: 12,
+    color: '#e62429',
+    isSwinging: false,
+    swingPoint: null,
+    ropeLength: 0
+};
+
+// کلیدها
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// ساختمان‌های شهر
+const buildings = [
+    { x: 0, width: 120, height: 250 },
+    { x: 160, width: 100, height: 320 },
+    { x: 300, width: 140, height: 280 },
+    { x: 480, width: 110, height: 350 },
+    { x: 630, width: 130, height: 260 },
+    { x: 800, width: 120, height: 310 }
+];
+
+// آیتم‌های امتیازی و دشمنان
+let collectibles = [{ x: 220, y: 120, collected: false }, { x: 530, y: 100, collected: false }];
+let enemies = [{ x: 370, y: 150, vy: 1.5 }, { x: 700, y: 120, vy: -1.5 }];
+
+// شلیک تار با موس
+canvas.addEventListener('mousedown', (e) => {
+    if (gameOver) return;
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // بررسی برخورد تار به بالای ساختمان‌ها
+    buildings.forEach(b => {
+        if (mouseX >= b.x && mouseX <= b.x + b.width && mouseY <= (canvas.height - b.height)) {
+            player.isSwinging = true;
+            player.swingPoint = { x: mouseX, y: mouseY };
+            player.ropeLength = Math.hypot(player.x - mouseX, player.y - mouseY);
+        }
+    });
+});
+
+canvas.addEventListener('mouseup', () => {
+    player.isSwinging = false;
+    player.swingPoint = null;
+});
+
+// حلقه اصلی بازی
+function update() {
+    if (gameOver) return;
+
+    // جاذبه
+    player.vy += 0.25;
+
+    // کنترل دستی (A / D)
+    if (keys['KeyA']) player.vx -= 0.2;
+    if (keys['KeyD']) player.vx += 0.2;
+
+    // فیزیک تاب خوردن پاندولی
+    if (player.isSwinging && player.swingPoint) {
+        let dx = player.x - player.swingPoint.x;
+        let dy = player.y - player.swingPoint.y;
+        let currentDist = Math.hypot(dx, dy);
+
+        if (currentDist > player.ropeLength) {
+            let angle = Math.atan2(dy, dx);
+            player.x = player.swingPoint.x + Math.cos(angle) * player.ropeLength;
+            player.y = player.swingPoint.y + Math.sin(angle) * player.ropeLength;
+
+            // نیروی پاندول
+            let tension = (player.vx * dx + player.vy * dy) / currentDist;
+            player.vx -= (dx / currentDist) * tension;
+            player.vy -= (dy / currentDist) * tension;
+        }
+    }
+
+    // اعمال سرعت
+    player.x += player.vx;
+    player.y += player.vy;
+    player.vx *= 0.99; // اصطکاک هوا
+
+    // برخورد به زمین
+    if (player.y + player.radius > canvas.height) {
+        player.y = canvas.height - player.radius;
+        player.vy = 0;
+        player.vx *= 0.8;
+    }
+
+    // جمع‌آوری امتیازها
+    collectibles.forEach(c => {
+        if (!c.collected && Math.hypot(player.x - c.x, player.y - c.y) < player.radius + 10) {
+            c.collected = true;
+            score += 50;
+        }
+    });
+
+    // حرکت و برخورد با دشمنان
+    enemies.forEach(e => {
+        e.y += e.vy;
+        if (e.y < 80 || e.y > 220) e.vy *= -1;
+
+        if (Math.hypot(player.x - e.x, player.y - e.y) < player.radius + 12) {
+            gameOver = true;
+        }
+    });
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // رسم ساختمان‌ها
+    buildings.forEach(b => {
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(b.x, canvas.height - b.height, b.width, b.height);
+        
+        // پنجره‌های درخشان
+        ctx.fillStyle = '#fbbf24';
+        for (let wy = canvas.height - b.height + 15; wy < canvas.height - 20; wy += 35) {
+            for (let wx = b.x + 15; wx < b.x + b.width - 15; wx += 25) {
+                ctx.fillRect(wx, wy, 10, 15);
+            }
+        }
+    });
+
+    // رسم تار اسپایدرمن
+    if (player.isSwinging && player.swingPoint) {
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(player.x, player.y);
+        ctx.lineTo(player.swingPoint.x, player.swingPoint.y);
+        ctx.stroke();
+    }
+
+    // رسم اسپایدرمن
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+
+    // چشم‌های ماسک اسپایدرمن
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(player.x - 3, player.y - 2, 3, 0, Math.PI * 2);
+    ctx.arc(player.x + 3, player.y - 2, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // رسم امتیازها
+    collectibles.forEach(c => {
+        if (!c.collected) {
+            ctx.fillStyle = '#22c55e';
+            ctx.beginPath();
+            ctx.arc(c.x, c.y, 8, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    });
+
+    // رسم دشمنان (پهپادها)
+    enemies.forEach(e => {
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(e.x - 10, e.y - 10, 20, 20);
+    });
+
+    // UI امتیاز
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px sans-serif';
+    ctx.fillText(`امتیاز: ${score}`, 20, 35);
+
+    if (gameOver) {
+        ctx.fillStyle = 'rgba(0,0,0,0.75)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#e62429';
+        ctx.font = '40px sans-serif';
+        ctx.fillText('باختی! صفحه را رفرش کن', canvas.width / 2 - 200, canvas.height / 2);
+    }
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+gameLoop();
+</script>
+</body>
+</html>
